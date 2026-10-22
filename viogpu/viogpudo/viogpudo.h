@@ -71,6 +71,11 @@ typedef struct _CURRENT_MODE
     PVOID RamFrameBuffer;
 } CURRENT_MODE;
 
+// The frame segment's smallest size (see VioGpuDod::GetMinFrameSegmentSize), in MiB: the default and the range the
+// MinFrameSegmentSizeMiB registry value may take
+#define MIN_FRAME_SEGMENT_SIZE_MIB 16
+#define MAX_FRAME_SEGMENT_SIZE_MIB 256
+
 class VioGpuDod;
 
 class VioGpuAdapter : IVioGpuPCI
@@ -247,6 +252,7 @@ class VioGpuDod
 
     USHORT m_PersistentDispMode0Width;
     USHORT m_PersistentDispMode0Height;
+    ULONG m_MinFrameSegmentSize;
 
   public:
     VioGpuDod(_In_ DEVICE_OBJECT *pPhysicalDeviceObject);
@@ -312,6 +318,19 @@ class VioGpuDod
     void SetUseFreshResourceId(BOOLEAN enable)
     {
         m_Flags.UseFreshResourceId = enable;
+    }
+    // The smallest frame segment, in bytes. The segment is allocated once, when the adapter starts, and a mode whose
+    // surface doesn't fit it is refused. 16 MiB unless the MinFrameSegmentSizeMiB registry value says otherwise.
+    ULONG GetMinFrameSegmentSize() const
+    {
+        return m_MinFrameSegmentSize;
+    }
+    void SetMinFrameSegmentSizeMiB(ULONG mib)
+    {
+        if (mib >= MIN_FRAME_SEGMENT_SIZE_MIB && mib <= MAX_FRAME_SEGMENT_SIZE_MIB)
+        {
+            m_MinFrameSegmentSize = mib * 1024 * 1024;
+        }
     }
     void SetPersistentDispMode0Width(USHORT res)
     {

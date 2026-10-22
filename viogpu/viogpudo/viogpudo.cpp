@@ -57,6 +57,7 @@ VioGpuDod::VioGpuDod(_In_ DEVICE_OBJECT *pPhysicalDeviceObject)
     RtlZeroMemory(&m_PointerShape, sizeof(m_PointerShape));
     m_PersistentDispMode0Width = 0;
     m_PersistentDispMode0Height = 0;
+    m_MinFrameSegmentSize = MIN_FRAME_SEGMENT_SIZE_MIB * 1024 * 1024;
     DbgPrint(TRACE_LEVEL_VERBOSE, ("<--- %s\n", __FUNCTION__));
 }
 
@@ -2289,6 +2290,14 @@ NTSTATUS VioGpuDod::GetRegisterInfo(void)
         SetUseFreshResourceId(!!value);
     }
 
+    // Optional, 16 MiB unless set (16 to 256): the smallest frame segment, see HWInit()
+    value = 0;
+    StatusOptional = ReadRegistryDWORD(DevInstRegKeyHandle, L"MinFrameSegmentSizeMiB", &value);
+    if (NT_SUCCESS(StatusOptional))
+    {
+        SetMinFrameSegmentSizeMiB(value);
+    }
+
     // The following keys are optional and no need to report error if them are missing
     value = 0;
     StatusOptional = ReadRegistryDWORD(DevInstRegKeyHandle, L"PersistentDispMode0Width", &value);
@@ -2695,7 +2704,10 @@ NTSTATUS VioGpuAdapter::HWInit(PCM_RESOURCE_LIST pResList, DXGK_DISPLAY_INFORMAT
     PHYSICAL_ADDRESS fb_pa = m_PciResources.GetPciBar(0)->GetPA();
     UINT fb_size = (UINT)m_PciResources.GetPciBar(0)->GetSize();
     UINT req_size = pDispInfo->Pitch * pDispInfo->Height;
-    req_size = max(req_size, 0x1000000);
+    // The frame segment is allocated once, here, and a mode whose surface doesn't fit it is refused (see
+    // IsSupportedVidPn). Its smallest size is 16 MiB (4.19 million pixels) unless MinFrameSegmentSizeMiB raises it:
+    // 32 MiB holds 3840x2160
+    req_size = max(req_size, m_pVioGpuDod->GetMinFrameSegmentSize());
 
     UINT max_res_size = MIN_WIDTH_SIZE * MIN_HEIGHT_SIZE;
     for (UINT idx = 0; idx < m_ModeCount; idx++)
